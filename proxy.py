@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class Proxy:
-    url: str  # "http://user:pass@host:port" or "socks5://..."
+    url: str
     score: float = 1.0
     last_fail: float = 0.0
     in_use: int = 0
@@ -28,9 +28,8 @@ class ProxyPool:
             if r <= acc:
                 p.in_use += 1
                 return p
-        p = cands[-1]
-        p.in_use += 1
-        return p
+        cands[-1].in_use += 1
+        return cands[-1]
 
     def release(self, p: Proxy | None, ok: bool, status: int | None = None):
         if p is None:
@@ -41,5 +40,5 @@ class ProxyPool:
         else:
             p.last_fail = time.time()
             p.score = max(0.05, p.score * 0.7)
-        if status == 509:
-            p.score *= 0.5
+            if status == 509:
+                p.score *= 0.5
