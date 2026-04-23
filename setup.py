@@ -1,10 +1,11 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
     name="megapull",
-    version="0.1.0",
+    version="0.2.0",
     description="Async parallel MEGA.nz downloader without an account",
-    packages=find_packages(),
+    packages=[""],
+    package_dir={"": "."},
     python_requires=">=3.10",
     install_requires=[
         "httpx[http2]>=0.27",
@@ -13,7 +14,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "megapull=megapull.cli:main",
+            "megapull=cli:main",
         ],
     },
 )
