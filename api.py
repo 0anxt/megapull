@@ -1,85 +1,79 @@
 from __future__ import annotations
 import httpx, itertools, random, asyncio
 from typing import Optional
-from .errors import (
-    MegaError, PermanentMegaError, RateLimited,
-    QuotaExceeded, GUrlExpired, raise_for_code,
-)
+from errors import raise_from_code, MegaError, RetriableMegaError, QuotaExceeded, GUrlExpired
 
 API = "https://g.api.mega.co.nz/cs"
 _seq = itertools.count(random.randint(0, 0xFFFFFFFF))
 
+async def api_req(client: httpx.AsyncClient, payload: list[dict]) -> list:
+    params = {"id": next(_seq)}
+    r = await client.post(API, params=params, json=payload, timeout=30)
+    r.raise_for_status()
+    data = r.json()
+    if isinstance(data, int):
+        raise_from_code(data)
+    return data
+
+async def get_download_info(client: httpx.AsyncClient, file_id: str, folder_key_b64: str | None = None) -> dict:
+    if folder_key_b64:
+        from crypto import folder_master_key, decrypt_node_key, fold_file_nodekey
+        master = folder_master_key(folder_key_b64)
+        dec_key = decrypt_node_key(file_id, master)
+        file_key_b64 = crypto.b64url_encode(dec_key)
+        payload = [{"a": "g", "g": 1, "ssl": 2, "n": file_id, "k": file_key_b64}]
+    else:
+        payload = [{"a": "g", "g": 1, "ssl": 2, "p": file_id}]
+    resp = await api_req(client, payload)
+    item = resp[0]
+    if isinstance(item, int) or "g" not in item:
+        raise MegaError(f"could not get g-URL: {item}")
+    return item
+
+async def enumerate_folder(client: httpx.AsyncClient, folder_id: str, folder_key_b64: str) -> list[dict]:
+    from crypto import folder_master_key, decrypt_node_key
+    master = folder_master_key(folder_key_b64)
+    payload = [{"a": "f", "n": folder_id, "r": 1, "c": 1}]
+    resp = await api_req(client, payload)
+    nodes = resp[0].get("f", []) if isinstance(resp[0], dict) else []
+    result = []
+    for node in nodes:
+        if node.get("t") == 1:  # folder node
+            continue
+        enc_k = node.get("k", "")
+        if enc_k:
+            dec_k = decrypt_node_key(enc_k, master)
+            node["_dec_key"] = dec_k
+        result.append(node)
+    return result
+
 class MegaAPI:
-    def __init__(self, client: httpx.AsyncClient, folder_id: str | None = None):
-        self.client = client
-        self.folder_id = folder_id
+    def __init__(self):
+        self._client: httpx.AsyncClient | None = None
+        self._seq = itertools.count(random.randint(0, 0xFFFFFFFF))
 
-    async def req(self, payload: list[dict], *, max_attempts: int = 6) -> list:
-        params = {"id": next(_seq)}
-        if self.folder_id:
-            params["n"] = self.folder_id
-        attempt = 0
-        while True:
-            attempt += 1
-            try:
-                r = await self.client.post(API, params=params, json=payload, timeout=30)
-            except (httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError) as e:
-                if attempt >= max_attempts:
-                    raise
-                await asyncio.sleep(min(30, 1.5 ** attempt))
-                continue
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(http2=True)
+        return self._client
 
-            if r.status_code in (429, 500, 503, 509):
-                if attempt >= max_attempts:
-                    raise RateLimited(r.status_code, r.text)
-                await asyncio.sleep(min(60, (1.8 ** attempt) + random.random()))
-                continue
-            if r.status_code >= 400:
-                body = r.text.strip()
-                if body.lstrip("-").isdigit():
-                    code = int(body)
-                    try:
-                        raise_for_code(code)
-                    except PermanentMegaError:
-                        raise
-                if attempt >= max_attempts:
-                    raise MegaError(r.status_code)
-                await asyncio.sleep(min(30, 1.5 ** attempt))
-                continue
-            r.raise_for_status()
+    async def api(self, payload: list[dict]) -> list:
+        c = await self._get_client()
+        params = {"id": next(self._seq)}
+        r = await c.post(API, params=params, json=payload, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, int):
+            raise_from_code(data)
+        return data
 
-            data = r.json()
-            if isinstance(data, int):
-                try:
-                    raise_for_code(data)
-                except PermanentMegaError:
-                    raise
-                if attempt >= max_attempts:
-                    raise MegaError(data)
-                await asyncio.sleep(min(30, 1.5 ** attempt))
-                continue
-            return data
+    async def get_download_info(self, file_id: str, folder_key_b64: str | None = None) -> dict:
+        return await get_download_info(await self._get_client(), file_id, folder_key_b64)
 
-    async def get_file_download(self, file_id: str) -> dict:
-        assert self.folder_id is None
-        resp = await self.req([{"a": "g", "g": 1, "ssl": 2, "p": file_id}])
-        item = resp[0]
-        if isinstance(item, int):
-            raise_for_code(item)
-        return item
+    async def enumerate_folder(self, folder_id: str, folder_key_b64: str) -> list[dict]:
+        return await enumerate_folder(await self._get_client(), folder_id, folder_key_b64)
 
-    async def get_folder_nodes(self) -> dict:
-        assert self.folder_id
-        resp = await self.req([{"a": "f", "c": 1, "r": 1, "ca": 1}])
-        item = resp[0]
-        if isinstance(item, int):
-            raise_for_code(item)
-        return item
-
-    async def get_node_download(self, node_handle: str) -> dict:
-        assert self.folder_id
-        resp = await self.req([{"a": "g", "g": 1, "ssl": 2, "n": node_handle}])
-        item = resp[0]
-        if isinstance(item, int):
-            raise_for_code(item)
-        return item
+    async def close(self):
+        if self._client:
+            await self._client.aclose()
+            self._client = None

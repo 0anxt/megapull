@@ -20,7 +20,7 @@ def pending_ranges(size: int, done: list[list[int]]):
     cur = 0
     for s, e in done:
         if s > cur:
-            yield cur, s
+            yield (cur, s)
         cur = max(cur, e)
     if cur < size:
-        yield cur, size
+        yield (cur, size)

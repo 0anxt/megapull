@@ -40,5 +40,5 @@ class ProxyPool:
         else:
             p.last_fail = time.time()
             p.score = max(0.05, p.score * 0.7)
-            if status == 509:
-                p.score *= 0.5
+        if status == 509:
+            p.score *= 0.5

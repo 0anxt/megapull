@@ -1,77 +1,56 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
-from .crypto import (
-    folder_master_key, decrypt_node_key, fold_file_nodekey,
-    decrypt_attributes, b64url_decode,
+import asyncio
+from crypto import (
+    folder_master_key, decrypt_node_key, b64url_decode, b64url_encode,
+    bytes_to_a32, a32_to_bytes, derive_file_key_iv,
 )
+from errors import MegaError
 
 @dataclass
 class FolderNode:
-    handle: str
-    parent: str
-    type: int
+    id: str
     name: str
     size: int
-    aes_key: Optional[bytes] = None
-    nonce: Optional[bytes] = None
-    mac_seed: Optional[bytes] = None
-    dir_key: Optional[bytes] = None
+    file_key_b64: str
+    path: str
 
-def _parse_shared_key(k_field: str) -> str:
-    return k_field.split("/")[0].split(":")[1]
-
-async def enumerate_folder(api, folder_key_b64: str) -> dict[str, FolderNode]:
+async def enumerate_folder(client, folder_id: str, folder_key_b64: str) -> list[FolderNode]:
     master = folder_master_key(folder_key_b64)
-    listing = await api.get_folder_nodes()
-    nodes: dict[str, FolderNode] = {}
+    from api import api_req
+    payload = [{"a": "f", "n": folder_id, "r": 1, "c": 1}]
+    resp = await api_req(client, payload)
+    raw_nodes = []
+    if isinstance(resp[0], dict):
+        raw_nodes = resp[0].get("f", [])
+    elif isinstance(resp, list) and len(resp) > 1:
+        raw_nodes = resp[1].get("f", []) if isinstance(resp[1], dict) else []
 
-    raw = listing["f"]
-    for f in raw:
-        h = f["h"]
-        t = f["t"]
-        if t == 2:
-            nodes[h] = FolderNode(handle=h, parent="", type=2, name="", size=0, dir_key=master)
-
-    for pass_t in (1, 0):
-        for f in raw:
-            if f.get("t") != pass_t:
-                continue
-            h = f["h"]
-            parent = f.get("p", "")
-            try:
-                enc_b64 = _parse_shared_key(f["k"])
-            except (KeyError, IndexError, ValueError):
-                continue
-            try:
-                nk = decrypt_node_key(enc_b64, master)
-            except Exception:
-                continue
-            if pass_t == 1:
-                name = "?"
-                try:
-                    name = decrypt_attributes(f["a"], nk).get("n", h)
-                except Exception:
-                    pass
-                nodes[h] = FolderNode(handle=h, parent=parent, type=1, name=name, size=0, dir_key=nk)
-            else:
-                aes_key, nonce, mac_seed = fold_file_nodekey(nk)
-                name = "?"
-                try:
-                    name = decrypt_attributes(f["a"], aes_key).get("n", h)
-                except Exception:
-                    pass
-                nodes[h] = FolderNode(
-                    handle=h, parent=parent, type=0,
-                    name=name, size=int(f.get("s", 0)),
-                    aes_key=aes_key, nonce=nonce, mac_seed=mac_seed,
-                )
+    nodes = []
+    for node in raw_nodes:
+        if node.get("t") == 1:
+            continue
+        raw_key = node.get("k", "")
+        if not raw_key:
+            continue
+        dec_key = decrypt_node_key(raw_key, master)
+        from crypto import fold_file_nodekey
+        file_key_b64 = b64url_encode(dec_key)
+        name = node.get("a") or node.get("n") or node.get("h", "unknown")
+        size = node.get("s", 0)
+        node_id = node.get("h", "")
+        nodes.append(FolderNode(
+            id=node_id,
+            name=name,
+            size=size,
+            file_key_b64=file_key_b64,
+            path=name,
+        ))
     return nodes
 
-def build_relative_path(nodes: dict[str, FolderNode], handle: str) -> str:
-    parts = []
-    cur = nodes.get(handle)
-    while cur and cur.type != 2:
-        parts.append(cur.name or cur.handle)
-        cur = nodes.get(cur.parent)
-    return "/".join(reversed(parts))
+def build_relative_path(nodes: list[FolderNode], node_id: str) -> str:
+    for n in nodes:
+        if n.id == node_id:
+            return n.path
+    return node_id

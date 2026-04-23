@@ -1,7 +1,7 @@
 import argparse, asyncio, sys
 from pathlib import Path
-from .download import Downloader
-from .errors import (
+from download import Downloader
+from errors import (
     PermanentMegaError, QuotaExceeded, RateLimited,
     EXIT_OK, EXIT_PERMANENT, EXIT_QUOTA, EXIT_RETRY_EXHAUST,
     EXIT_BAD_LINK, EXIT_GENERIC,
