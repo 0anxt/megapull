@@ -6,8 +6,11 @@ from errors import raise_from_code, MegaError, RetriableMegaError, QuotaExceeded
 API = "https://g.api.mega.co.nz/cs"
 _seq = itertools.count(random.randint(0, 0xFFFFFFFF))
 
-async def api_req(client: httpx.AsyncClient, payload: list[dict]) -> list:
+async def api_req(client: httpx.AsyncClient, payload: list[dict], *, folder_id: str | None = None) -> list:
     params = {"id": next(_seq)}
+    if folder_id:
+        params["n"] = folder_id
+        params["n2"] = f"folder/{folder_id}"
     r = await client.post(API, params=params, json=payload, timeout=30)
     r.raise_for_status()
     data = r.json()
@@ -15,16 +18,16 @@ async def api_req(client: httpx.AsyncClient, payload: list[dict]) -> list:
         raise_from_code(data)
     return data
 
-async def get_download_info(client: httpx.AsyncClient, file_id: str, folder_key_b64: str | None = None) -> dict:
+async def get_download_info(client: httpx.AsyncClient, file_id: str, folder_key_b64: str | None = None, folder_id: str | None = None) -> dict:
     if folder_key_b64:
-        from crypto import folder_master_key, decrypt_node_key, fold_file_nodekey
+        from crypto import folder_master_key, decrypt_node_key, b64url_encode
         master = folder_master_key(folder_key_b64)
         dec_key = decrypt_node_key(file_id, master)
-        file_key_b64 = crypto.b64url_encode(dec_key)
+        file_key_b64 = b64url_encode(dec_key)
         payload = [{"a": "g", "g": 1, "ssl": 2, "n": file_id, "k": file_key_b64}]
     else:
         payload = [{"a": "g", "g": 1, "ssl": 2, "p": file_id}]
-    resp = await api_req(client, payload)
+    resp = await api_req(client, payload, folder_id=folder_id)
     item = resp[0]
     if isinstance(item, int) or "g" not in item:
         raise MegaError(f"could not get g-URL: {item}")
@@ -33,8 +36,8 @@ async def get_download_info(client: httpx.AsyncClient, file_id: str, folder_key_
 async def enumerate_folder(client: httpx.AsyncClient, folder_id: str, folder_key_b64: str) -> list[dict]:
     from crypto import folder_master_key, decrypt_node_key
     master = folder_master_key(folder_key_b64)
-    payload = [{"a": "f", "n": folder_id, "r": 1, "c": 1}]
-    resp = await api_req(client, payload)
+    payload = [{"a": "f", "r": 1, "c": 1}]
+    resp = await api_req(client, payload, folder_id=folder_id)
     nodes = resp[0].get("f", []) if isinstance(resp[0], dict) else []
     result = []
     for node in nodes:
@@ -51,6 +54,7 @@ class MegaAPI:
     def __init__(self):
         self._client: httpx.AsyncClient | None = None
         self._seq = itertools.count(random.randint(0, 0xFFFFFFFF))
+        self._folder_id: str | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -60,6 +64,9 @@ class MegaAPI:
     async def api(self, payload: list[dict]) -> list:
         c = await self._get_client()
         params = {"id": next(self._seq)}
+        if self._folder_id:
+            params["n"] = self._folder_id
+            params["n2"] = f"folder/{self._folder_id}"
         r = await c.post(API, params=params, json=payload, timeout=30)
         r.raise_for_status()
         data = r.json()
@@ -67,8 +74,11 @@ class MegaAPI:
             raise_from_code(data)
         return data
 
+    def set_folder_session(self, folder_id: str):
+        self._folder_id = folder_id
+
     async def get_download_info(self, file_id: str, folder_key_b64: str | None = None) -> dict:
-        return await get_download_info(await self._get_client(), file_id, folder_key_b64)
+        return await get_download_info(await self._get_client(), file_id, folder_key_b64, self._folder_id)
 
     async def enumerate_folder(self, folder_id: str, folder_key_b64: str) -> list[dict]:
         return await enumerate_folder(await self._get_client(), folder_id, folder_key_b64)
