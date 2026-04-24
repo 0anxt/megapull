@@ -2,7 +2,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Matches both legacy (#!) and new (/file/) MEGA public links.
 _LEGACY_FILE_RE = re.compile(
     r"mega\.nz/#!([A-Za-z0-9_-]+)!([A-Za-z0-9_-]+)"
 )
@@ -15,7 +14,6 @@ _LEGACY_FOLDER_RE = re.compile(
 _NEW_FOLDER_RE = re.compile(
     r"mega\.nz/folder/([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)"
 )
-# Single file within a folder: mega.nz/folder/FID#FKEY/file/FID#FKEY
 _FOLDER_FILE_RE = re.compile(
     r"mega\.nz/folder/([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)/file/([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)"
 )
