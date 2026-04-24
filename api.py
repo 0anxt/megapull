@@ -45,7 +45,9 @@ async def enumerate_folder(client: httpx.AsyncClient, folder_id: str, folder_key
             continue
         enc_k = node.get("k", "")
         if enc_k:
-            dec_k = decrypt_node_key(enc_k, master)
+            # enc_k format: "handle:key_b64" — extract the key portion after ':'
+            key_part = enc_k.split(":")[-1]
+            dec_k = decrypt_node_key(key_part, master)
             node["_dec_key"] = dec_k
         result.append(node)
     return result
