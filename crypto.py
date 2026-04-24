@@ -38,9 +38,12 @@ def aes_ecb_decrypt(key16: bytes, data: bytes) -> bytes:
     dec = Cipher(algorithms.AES(key16), modes.ECB(), default_backend()).decryptor()
     return dec.update(data) + dec.finalize()
 
-def decrypt_node_key(enc_key_b64: str, master16: bytes) -> bytes:
-    """Decrypt a node key (16B = folder key, 32B = file node key) using master."""
-    enc = b64url_decode(enc_key_b64)
+def decrypt_node_key(enc_key_b64: str | bytes, master16: bytes) -> bytes:
+    """Decrypt a node key (16 or 32 bytes encrypted) using folder master key."""
+    if isinstance(enc_key_b64, bytes):
+        enc = enc_key_b64
+    else:
+        enc = b64url_decode(enc_key_b64)
     if len(enc) not in (16, 32):
         raise ValueError(f"node enc key len {len(enc)}, expected 16 or 32")
     if len(enc) == 16:
