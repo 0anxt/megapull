@@ -82,6 +82,25 @@ class MegaAPI:
     async def get_download_info(self, file_id: str, folder_key_b64: str | None = None) -> dict:
         return await get_download_info(await self._get_client(), file_id, folder_key_b64, self._folder_id)
 
+    async def get_node_download(self, node_handle: str, folder_key_b64: str) -> dict:
+        """Get download info for a file node inside a folder session using its decrypted key."""
+        from crypto import folder_master_key, decrypt_node_key, b64url_encode
+        master = folder_master_key(folder_key_b64)
+        dec_key = decrypt_node_key(node_handle, master)  # node_handle is also used as the encrypted key ref
+        file_key_b64 = b64url_encode(dec_key)
+        payload = [{"a": "g", "g": 1, "ssl": 2, "n": node_handle, "k": file_key_b64}]
+        params = {"id": next(self._seq), "n": self._folder_id, "n2": f"folder/{self._folder_id}"}
+        c = await self._get_client()
+        r = await c.post(API, params=params, json=payload, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, int):
+            raise_from_code(data)
+        item = data[0]
+        if isinstance(item, int) or "g" not in item:
+            raise MegaError(f"could not get g-URL: {item}")
+        return item
+
     async def enumerate_folder(self, folder_id: str, folder_key_b64: str) -> list[dict]:
         return await enumerate_folder(await self._get_client(), folder_id, folder_key_b64)
 
