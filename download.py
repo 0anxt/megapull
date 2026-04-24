@@ -49,7 +49,7 @@ class Downloader:
                     enc_key_b64 = node["k"].split(":")[1] if ":" in node["k"] else node["k"]
                     node_key_32 = decrypt_node_key(enc_key_b64, master_key)
                     key16, nonce8, mac_seed = fold_file_nodekey(node_key_32)
-                    dl = await self.api.get_node_download(node["h"])
+                    dl = await self.api.get_node_download(node["h"], self.parsed.folder_key_b64)
                     fname = decrypt_attributes(node["a"], key16)["n"]
                     size = dl["s"]
                     g_url = dl["g"]
@@ -59,7 +59,7 @@ class Downloader:
             master_key = folder_master_key(self.parsed.folder_key_b64)
             node_key_32 = decrypt_node_key(self.parsed.sub_file_key_b64, master_key)
             key16, nonce8, mac_seed = fold_file_nodekey(node_key_32)
-            dl = await self.api.get_node_download(self.parsed.sub_file_id)
+            dl = await self.api.get_node_download(self.parsed.sub_file_id, self.parsed.folder_key_b64)
             fname = decrypt_attributes(self.parsed.sub_file_id, key16)["n"]
             size = dl["s"]
             g_url = dl["g"]
