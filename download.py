@@ -39,6 +39,7 @@ class Downloader:
             await self._download_file(fname, size, g_url, key16, nonce8, mac_seed, None)
 
         elif isinstance(self.parsed, FolderLink):
+            self.api.set_folder_session(self.parsed.folder_id)
             nodes = await self.api.enumerate_folder(self.parsed.folder_id, self.parsed.folder_key_b64)
             if not nodes:
                 print("[bad-link] Folder returned no files (link may be empty, deleted, or the key is incorrect)", file=sys.stderr)
