@@ -13,13 +13,15 @@ CHUNK = 16 * 1024 * 1024
 WORKERS_DEFAULT = 8
 
 class Downloader:
-    def __init__(self, link: str, dest_dir: Path, workers: int = WORKERS_DEFAULT, proxies: list[str] | None = None, use_proxy_free_first: bool = True):
+    def __init__(self, link: str, dest_dir: Path, workers: int = WORKERS_DEFAULT, proxies: list[str] | None = None, use_proxy_free_first: bool = True, verify_mac: bool = False, strict_mac: bool = False):
         self.link = link
         self.parsed = parse_link(link)
         self.dest_dir = dest_dir
         self.workers = workers
         self.proxies = proxies or []
         self.free_first = use_proxy_free_first
+        self.verify_mac = verify_mac
+        self.strict_mac = strict_mac
         self.api = MegaAPI()
 
     async def run(self) -> Path:
