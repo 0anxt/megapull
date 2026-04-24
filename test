@@ -1,0 +1,31 @@
+import asyncio, httpx, itertools, random
+from crypto import folder_master_key, b64url_decode
+
+API = "https://g.api.mega.co.nz/cs"
+_seq = itertools.count(random.randint(0, 0xFFFFFFFF))
+
+async def api_req(client, payload, folder_id=None):
+    params = {"id": next(_seq), "n": folder_id, "n2": f"folder/{folder_id}"}
+    r = await client.post(API, params=params, json=payload, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+async def main():
+    async with httpx.AsyncClient(headers={"User-Agent": "Mozilla/5.0"}) as client:
+        master = folder_master_key("s20-5UCQdXaq7RQOvcazuQ")
+        payload = [{"a": "f", "r": 1, "c": 1}]
+        resp = await api_req(client, payload, folder_id="t71iEBJQ")
+        nodes = resp[0].get("f", []) if isinstance(resp[0], dict) else []
+        print(f"Total nodes: {len(nodes)}")
+        for node in nodes:
+            t = node.get("t")
+            if t == 0:
+                k = node.get("k", "")
+                print(f"  File h={node['h'][:8]}, t={t}, k={k[:80]}")
+                parts = k.split(":")
+                print(f"    parts count: {len(parts)}")
+                if len(parts) >= 2:
+                    print(f"    part[0] len={len(parts[0])}, val={parts[0][:8]}")
+                    print(f"    part[1] len={len(parts[1])}, val={parts[1][:8]}")
+
+asyncio.run(main())
