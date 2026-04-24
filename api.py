@@ -34,21 +34,29 @@ async def get_download_info(client: httpx.AsyncClient, file_id: str, folder_key_
     return item
 
 async def enumerate_folder(client: httpx.AsyncClient, folder_id: str, folder_key_b64: str) -> list[dict]:
-    from crypto import folder_master_key, decrypt_node_key
+    from crypto import folder_master_key, decrypt_node_key, b64url_decode
     master = folder_master_key(folder_key_b64)
     payload = [{"a": "f", "r": 1, "c": 1}]
     resp = await api_req(client, payload, folder_id=folder_id)
     nodes = resp[0].get("f", []) if isinstance(resp[0], dict) else []
     result = []
     for node in nodes:
-        if node.get("t") == 1:  # folder node
-            continue
+        t = node.get("t")
+        if t == 1:
+            continue  # skip folder nodes
         enc_k = node.get("k", "")
-        if enc_k:
-            # enc_k format: "handle:key_b64" — extract the key portion after ':'
-            key_part = enc_k.split(":")[-1]
-            dec_k = decrypt_node_key(key_part, master)
-            node["_dec_key"] = dec_k
+        if not enc_k:
+            continue  # no key
+        parts = enc_k.split(":")
+        key_part = parts[-1] if len(parts) <= 2 else ":".join(parts[1:])
+        try:
+            raw_len = len(b64url_decode(key_part))
+            if raw_len not in (16, 32):
+                continue  # invalid key length, skip
+        except Exception:
+            continue
+        dec_k = decrypt_node_key(key_part, master)
+        node["_dec_key"] = dec_k
         result.append(node)
     return result
 
