@@ -10,7 +10,7 @@ from crypto import derive_file_key_iv, aes_ctr_decryptor, decrypt_attributes, b6
 from crypto import derive_file_key_iv, b64url_encode, fold_file_nodekey
 from crypto import folder_master_key, decrypt_node_key
 from crypto import folder_master_key
-from errors import EXIT_OK, EXIT_PERMANENT, EXIT_QUOTA, EXIT_RETRY_EXHAUST, EXIT_BAD_LINK, EXIT_GENERIC, raise_for_code, MegaError, PermanentMegaError, QuotaExceeded
+from errors import EXIT_OK, EXIT_PERMANENT, EXIT_QUOTA, EXIT_RETRY_EXHAUST, EXIT_BAD_LINK, EXIT_GENERIC, raise_from_code, MegaError, PermanentMegaError, QuotaExceeded
 
 CHUNK = 16 * 1024 * 1024  # 16 MiB per worker range
 WORKERS_DEFAULT = 8
