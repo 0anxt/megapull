@@ -8,11 +8,19 @@ _LEGACY_FILE_RE = re.compile(
 _NEW_FILE_RE = re.compile(
     r"mega\.nz/file/([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)"
 )
+# Legacy file with ! separator (hybrid: /file/ path + ! key format)
+_HYBRID_FILE_RE = re.compile(
+    r"mega\.nz/file/([A-Za-z0-9_-]+)!([A-Za-z0-9_-]+)"
+)
 _LEGACY_FOLDER_RE = re.compile(
     r"mega\.nz/#F!([A-Za-z0-9_-]+)!([A-Za-z0-9_-]+)"
 )
 _NEW_FOLDER_RE = re.compile(
     r"mega\.nz/folder/([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)"
+)
+# Legacy folder with ! separator (hybrid: /folder/ path + ! key format)
+_HYBRID_FOLDER_RE = re.compile(
+    r"mega\.nz/folder/([A-Za-z0-9_-]+)!([A-Za-z0-9_-]+)"
 )
 _FOLDER_FILE_RE = re.compile(
     r"mega\.nz/folder/([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)/file/([A-Za-z0-9_-]+)#([A-Za-z0-9_-]+)"
@@ -52,4 +60,8 @@ def parse_link(url: str) -> FileLink | FolderLink | FolderFileLink:
         return FileLink(file_id=m.group(1), file_key_b64=m.group(2))
     if (m := _NEW_FILE_RE.search(url)):
         return FileLink(file_id=m.group(1), file_key_b64=m.group(2))
+    if (m := _HYBRID_FILE_RE.search(url)):
+        return FileLink(file_id=m.group(1), file_key_b64=m.group(2))
+    if (m := _HYBRID_FOLDER_RE.search(url)):
+        return FolderLink(folder_id=m.group(1), folder_key_b64=m.group(2))
     raise ValueError(f"unrecognized MEGA link: {url}")
